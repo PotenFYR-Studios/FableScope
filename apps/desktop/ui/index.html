@@ -84,6 +84,8 @@
         <textarea id="caJob" rows="4" placeholder='{"hash_file":"hashes.txt","hashcat_mode":1000,"attack":{"dictionary":{"wordlist":"rockyou.txt","rules":"best64.rule"}},"authorized":true}'></textarea>
         <div class="row"><button id="caBuildBtn">Build Audit Command</button></div>
         <div class="row"><button id="reportEnterprise">Report (Enterprise HTML)</button></div>
+        <div class="row"><input id="specKind" placeholder="spec kind: openapi/swagger/graphql" /><button id="importSpecBtn">Import API Spec (paste below)</button></div>
+        <textarea id="specContent" rows="4" placeholder='Paste OpenAPI JSON or GraphQL SDL here'></textarea>
         <pre id="phase2Out">[]</pre>
       </div>
 
@@ -275,6 +277,7 @@
       try { show('phase2Out', await invoke('build_credential_audit', { jobJson: $('caJob').value, engine: $('caEngine').value || 'hashcat', sampleHash: $('caSample').value || null, johnFormat: null })); } catch(e){ show('phase2Out', String(e)); }
     };
     $('reportEnterprise').onclick = async () => { try { show('phase2Out', await invoke('export_project_report', { projectId: $('projectId').value, format: 'enterprise' })); } catch(e){ show('phase2Out', String(e)); } };
+    $('importSpecBtn').onclick = async () => { try { show('phase2Out', await invoke('import_api_spec', { projectId: $('projectId').value || null, kind: $('specKind').value || 'openapi', content: $('specContent').value })); } catch(e){ show('phase2Out', String(e)); } };
 
     init();
   </script>

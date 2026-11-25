@@ -184,7 +184,7 @@ Target/Asset
 - [~] P2: OWASP checklist engine + coverage matrix + evidence/validation model (templates, checklist status, evidence refs, run linkage, confirmed export started)
 - [x] P2: Reporting engine + CVSS calculator + enterprise templates (`fs-reporting`: CVSS v3.1 calculator, severity breakdown, checklist-coverage KPI, `render_enterprise_html` exec-summary report; `export_project_report format=enterprise`)
 - [x] P2: Hashcat/John adapters + hash audit workflows (`fs-tools::hashid` ranked identification w/ Hashcat mode + John format; `fs-tools::credential_audit` authorization-gated Hashcat/John command building + potfile/`--show` parsing; `fs-tools::codec` encoders; `build_credential_audit`/`identify_hash`/`codec_transform` commands, Hashcat/John registered in the gated tool manager)
-- [~] P2: Web/API crawler + OpenAPI/GraphQL discovery + response diffing (checklist/tool-run flow present; native crawler + spec import pending)
+- [~] P2: Web/API crawler + OpenAPI/GraphQL discovery + response diffing (`fs-recon::specimport`: OpenAPI 3.x/Swagger 2.0 + GraphQL SDL import to normalized endpoint/param inventory via `import_api_spec`, param names seed recon; native HTML crawler + response diffing still pending)
 - [ ] P3: Web/API/Mobile/Cloud OWASP checklist execution + AD/WiFi/browser/red-team adapters
 - [ ] P4: Enterprise management, RBAC, distributed execution, advanced reporting/compliance
 

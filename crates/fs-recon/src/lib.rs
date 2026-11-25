@@ -11,7 +11,10 @@ pub mod cloud;
 pub mod filter;
 pub mod fingerprint;
 pub mod mutators;
+pub mod specimport;
 pub mod subdomain;
+
+pub use specimport::{parse_graphql_sdl, parse_openapi, ApiEndpoint, ApiInventory, ApiParam};
 
 pub use cloud::{exposure_indicators, storage_candidates_scoped, CloudProvider, ExposureIndicator};
 pub use filter::{apply_filters, group, Filter, GroupBy};

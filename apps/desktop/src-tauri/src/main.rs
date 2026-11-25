@@ -867,6 +867,36 @@ fn codec_transform(codec_name: String, input: String, decode: bool) -> Result<se
     Ok(serde_json::json!({"codec": codec_name, "decode": decode, "output": out}))
 }
 
+/// Import an OpenAPI/Swagger (JSON) or GraphQL SDL spec into a normalized
+/// endpoint + parameter inventory. Discovered parameter names are persisted as
+/// recon results so they seed param fuzzing.
+#[tauri::command]
+fn import_api_spec(project_id: Option<String>, kind: String, content: String, state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let inv = match kind.as_str() {
+        "openapi" | "swagger" => {
+            let doc: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("invalid JSON spec: {e}"))?;
+            fs_recon::parse_openapi(&doc)
+        }
+        "graphql" => fs_recon::parse_graphql_sdl(&content),
+        _ => return Err("kind must be 'openapi', 'swagger', or 'graphql'".into()),
+    };
+    if let Some(pid) = &project_id {
+        let st = state.lock().map_err(|_| "state lock")?;
+        let s = st.storage()?;
+        let rows: Vec<serde_json::Value> = inv.endpoints.iter().map(|e| {
+            serde_json::json!({"id": uuid::Uuid::new_v4().to_string(), "kind": "api_endpoint", "method": e.method, "url": e.path, "operation_id": e.operation_id, "params": e.params})
+        }).collect();
+        let _ = s.save_recon_results(Some(pid), "api_spec", &rows);
+    }
+    let endpoint_count = inv.endpoints.len();
+    let param_names = inv.param_names();
+    Ok(serde_json::json!({
+        "inventory": inv,
+        "endpoint_count": endpoint_count,
+        "param_names": param_names,
+    }))
+}
+
 /// Build an authorized Hashcat/John command for a credential-audit job. Does NOT
 /// execute — returns the argument vector for review; execution runs through the
 /// gated tool manager. `authorized` must be true or the build is refused.
@@ -948,7 +978,8 @@ fn main() {
             list_wordlist_versions,
             identify_hash,
             codec_transform,
-            build_credential_audit
+            build_credential_audit,
+            import_api_spec
         ])
         .run(tauri::generate_context!())
         .expect("error while running FableScope");
