@@ -90,6 +90,18 @@
         <pre id="phase2Out">[]</pre>
       </div>
 
+      <div class="card">
+        <h3>Phase 3 — OOB Validation, AD Analysis & Tool Imports</h3>
+        <div class="muted">No-VPS OOB validation (correlation IDs + callback matching), authorized offline AD artifact analysis, and normalized imports from external tools. AD/OOB are analysis/validation only — no collection or cracking here.</div>
+        <div class="row" style="margin-top:8px"><input id="oobDomain" placeholder="OOB interaction domain (e.g. xxxx.oast.pro)" /><input id="oobClass" placeholder="class: ssrf/blind_rce/xxe/blind_sqli/dns" /><input id="oobTarget" placeholder="target" /><button id="oobMintBtn">Mint OOB Payload</button></div>
+        <textarea id="oobCallbacks" rows="2" placeholder='callbacks JSON: [{"host":"TOKEN.oast.pro","protocol":"dns","at":"2026-01-01T00:00:00Z"}]'></textarea>
+        <div class="row"><button id="oobMatchBtn">Match Callbacks</button></div>
+        <textarea id="adDump" rows="3" placeholder='AD dump: NTDS/secretsdump, NetNTLM, or $krb5tgs$/$krb5asrep$ lines'></textarea>
+        <div class="row"><button id="adParseBtn">Parse AD Dump</button><input id="bhKind" placeholder="bloodhound kind: user/computer/group" /><button id="bhImportBtn">Import BloodHound (paste in AD box)</button></div>
+        <div class="row"><button id="listAdaptersBtn">Import Adapters</button><input id="adapterId" placeholder="adapter id (import.nuclei/import.nmap/...)" /><button id="importOutputBtn">Import Tool Output (paste in AD box)</button></div>
+        <pre id="phase3Out">[]</pre>
+      </div>
+
       <div class="grid">
         <div class="card">
           <h3>Config (import/export-ready JSON)</h3>
@@ -281,6 +293,14 @@
     };
     $('reportEnterprise').onclick = async () => { try { show('phase2Out', await invoke('export_project_report', { projectId: $('projectId').value, format: 'enterprise' })); } catch(e){ show('phase2Out', String(e)); } };
     $('importSpecBtn').onclick = async () => { try { show('phase2Out', await invoke('import_api_spec', { projectId: $('projectId').value || null, kind: $('specKind').value || 'openapi', content: $('specContent').value })); } catch(e){ show('phase2Out', String(e)); } };
+
+    // --- Phase 3 OOB / AD / imports ---
+    $('oobMintBtn').onclick = async () => { try { show('phase3Out', await invoke('oob_mint', { providerDomain: $('oobDomain').value, class: $('oobClass').value || 'ssrf', target: $('oobTarget').value, checkId: null })); } catch(e){ show('phase3Out', String(e)); } };
+    $('oobMatchBtn').onclick = async () => { try { show('phase3Out', await invoke('oob_match', { projectId: $('projectId').value || null, callbacksJson: $('oobCallbacks').value || '[]' })); } catch(e){ show('phase3Out', String(e)); } };
+    $('adParseBtn').onclick = async () => { try { show('phase3Out', await invoke('ad_parse_dump', { projectId: $('projectId').value || null, text: $('adDump').value })); } catch(e){ show('phase3Out', String(e)); } };
+    $('bhImportBtn').onclick = async () => { try { show('phase3Out', await invoke('ad_import_bloodhound', { projectId: $('projectId').value || null, kind: $('bhKind').value || 'user', content: $('adDump').value })); } catch(e){ show('phase3Out', String(e)); } };
+    $('listAdaptersBtn').onclick = async () => { try { show('phase3Out', await invoke('list_import_adapters')); } catch(e){ show('phase3Out', String(e)); } };
+    $('importOutputBtn').onclick = async () => { try { show('phase3Out', await invoke('import_tool_output', { projectId: $('projectId').value || null, adapterId: $('adapterId').value || 'import.nuclei', content: $('adDump').value })); } catch(e){ show('phase3Out', String(e)); } };
 
     init();
   </script>

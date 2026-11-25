@@ -868,10 +868,13 @@ name = "fablescope-desktop"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "fs-ad",
+ "fs-adapters",
  "fs-ai",
  "fs-checklists",
  "fs-config",
  "fs-core",
+ "fs-oob",
  "fs-recon",
  "fs-reporting",
  "fs-storage",
@@ -987,6 +990,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-ad"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "fs-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "fs-adapters"
+version = "0.1.0"
+dependencies = [
+ "fs-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "fs-ai"
 version = "0.1.0"
 dependencies = [
@@ -1027,6 +1051,20 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
+name = "fs-oob"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "fs-core",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
  "thiserror 2.0.21",
  "uuid",
 ]

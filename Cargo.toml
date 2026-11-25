@@ -10,6 +10,9 @@ members = [
   "crates/fs-wordlists",
   "crates/fs-reporting",
   "crates/fs-ai",
+  "crates/fs-oob",
+  "crates/fs-ad",
+  "crates/fs-adapters",
   "apps/desktop/src-tauri",
 ]
 

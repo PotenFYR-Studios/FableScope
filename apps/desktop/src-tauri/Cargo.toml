@@ -21,3 +21,6 @@ fs-recon = { path = "../../../crates/fs-recon" }
 fs-wordlists = { path = "../../../crates/fs-wordlists" }
 fs-reporting = { path = "../../../crates/fs-reporting" }
 fs-ai = { path = "../../../crates/fs-ai" }
+fs-oob = { path = "../../../crates/fs-oob" }
+fs-ad = { path = "../../../crates/fs-ad" }
+fs-adapters = { path = "../../../crates/fs-adapters" }

@@ -12,6 +12,8 @@ use fs_reporting::{calculate_cvss_v31, render_enterprise_html, render_report_csv
 use fs_storage::Storage;
 use fs_tools::{codec, credential_audit, hashid, password, ToolBundleSource, ToolKind, ToolManager, ToolManifest, ToolRunRequest};
 use fs_wordlists::{builtin_packs, WordlistRegistry};
+use fs_oob::{OobClass, OobEngine, StaticProvider};
+use fs_adapters::AdapterRegistry;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -960,6 +962,162 @@ fn build_credential_audit(job_json: String, engine: String, sample_hash: Option<
     Ok(serde_json::json!({"engine": engine, "args": args, "resolved_mode": job.resolve_mode(sample_hash.as_deref())}))
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2/3: OOB validation, AD offline analysis, external-tool import adapters.
+// ---------------------------------------------------------------------------
+
+fn oob_engine_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("oob-correlations.json"))
+}
+
+fn load_oob(app: &tauri::AppHandle) -> OobEngine {
+    if let Ok(p) = oob_engine_path(app) {
+        if let Ok(text) = std::fs::read_to_string(&p) {
+            if let Ok(e) = serde_json::from_str::<OobEngine>(&text) {
+                return e;
+            }
+        }
+    }
+    OobEngine::new()
+}
+
+fn save_oob(app: &tauri::AppHandle, eng: &OobEngine) -> Result<(), String> {
+    let p = oob_engine_path(app)?;
+    std::fs::write(&p, serde_json::to_string_pretty(eng).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+fn parse_oob_class(name: &str) -> Result<OobClass, String> {
+    Ok(match name {
+        "ssrf" => OobClass::Ssrf,
+        "blind_rce" => OobClass::BlindRce,
+        "xxe" => OobClass::Xxe,
+        "blind_sqli" => OobClass::BlindSqli,
+        "dns" | "dns_pingback" => OobClass::DnsPingback,
+        _ => return Err("class must be ssrf/blind_rce/xxe/blind_sqli/dns".into()),
+    })
+}
+
+/// Mint a safe OOB payload + correlation for a blind-vuln test (no-VPS mode:
+/// pass the interaction domain from a public provider such as Interactsh). If
+/// `provider_domain` is empty the blind check is reported as blocked.
+#[tauri::command]
+fn oob_mint(app: tauri::AppHandle, provider_domain: String, class: String, target: String, check_id: Option<String>) -> Result<serde_json::Value, String> {
+    let class = parse_oob_class(&class)?;
+    let provider = StaticProvider { name: "configured".into(), domain: provider_domain.clone(), active: !provider_domain.trim().is_empty() };
+    let mut eng = load_oob(&app);
+    match eng.mint(&provider, class, &target, check_id) {
+        Some(payload) => {
+            save_oob(&app, &eng)?;
+            serde_json::to_value(payload).map_err(|e| e.to_string())
+        }
+        None => Ok(serde_json::json!({"blocked": true, "reason": "no active OOB provider configured; set an interaction domain to enable blind checks"})),
+    }
+}
+
+/// Match observed OOB callbacks to registered correlations. Confirmed
+/// interactions (deterministic token match) are saved as findings.
+#[tauri::command]
+fn oob_match(project_id: Option<String>, callbacks_json: String, state: State<'_, Mutex<AppState>>, app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let callbacks: Vec<fs_oob::Callback> = serde_json::from_str(&callbacks_json).map_err(|e| e.to_string())?;
+    let eng = load_oob(&app);
+    let confirmed = eng.match_all(&callbacks);
+    if let Some(pid_str) = &project_id {
+        if let Ok(pid) = uuid::Uuid::parse_str(pid_str) {
+            let st = state.lock().map_err(|_| "state lock")?;
+            let s = st.storage()?;
+            for c in &confirmed {
+                if let Ok(mut f) = fs_core::Finding::new(pid, format!("Confirmed OOB interaction ({:?})", c.correlation.class), Severity::High) {
+                    f.status = Some("confirmed".into());
+                    f.correlation_id = Some(c.correlation.token.clone());
+                    f.source_check_id = c.correlation.check_id.clone();
+                    f.description = format!("Out-of-band callback from {} confirmed test against {}", c.callback.host, c.correlation.target);
+                    f.evidence.insert("callback".into(), serde_json::to_value(&c.callback).unwrap_or_default());
+                    let _ = s.save_finding(&f);
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({"confirmed_count": confirmed.len(), "confirmed": confirmed}))
+}
+
+/// Parse an authorized AD credential dump (NTDS/secretsdump, NetNTLM, Kerberos
+/// roast artifacts) into normalized records + a risk summary. High-risk items
+/// are saved as findings. No cracking is performed.
+#[tauri::command]
+fn ad_parse_dump(project_id: Option<String>, text: String, state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let artifacts = fs_ad::parse_dump(&text);
+    let summary = fs_ad::summarize(&artifacts);
+    if let Some(pid_str) = &project_id {
+        if let Ok(pid) = uuid::Uuid::parse_str(pid_str) {
+            let st = state.lock().map_err(|_| "state lock")?;
+            let s = st.storage()?;
+            for a in artifacts.iter().filter(|a| a.risk >= 70) {
+                let title = format!("AD risk: {:?} {}", a.kind, a.username.clone().unwrap_or_default());
+                if let Ok(mut f) = fs_core::Finding::new(pid, title, Severity::High) {
+                    f.status = Some("potential".into());
+                    f.description = a.rationale.join("; ");
+                    f.evidence.insert("kind".into(), serde_json::json!(a.kind));
+                    f.evidence.insert("hashcat_mode".into(), serde_json::json!(a.hashcat_mode));
+                    let _ = s.save_finding(&f);
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({"summary": summary, "artifacts": artifacts}))
+}
+
+/// Import a BloodHound users/computers JSON export into normalized AD objects.
+#[tauri::command]
+fn ad_import_bloodhound(project_id: Option<String>, kind: String, content: String, state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let doc: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("invalid BloodHound JSON: {e}"))?;
+    let objects = fs_ad::import_bloodhound(&doc, &kind);
+    if let Some(pid) = &project_id {
+        let st = state.lock().map_err(|_| "state lock")?;
+        let s = st.storage()?;
+        for o in &objects {
+            let asset = serde_json::json!({"id": uuid::Uuid::new_v4().to_string(), "project_id": pid, "kind": "ad_object", "value": o.name, "source": "bloodhound", "created_at": chrono::Utc::now().to_rfc3339(), "meta": {"risk_tags": o.risk_tags, "ad_kind": o.kind}});
+            let _ = s.save_asset(&asset);
+        }
+    }
+    Ok(serde_json::json!({"count": objects.len(), "objects": objects}))
+}
+
+/// List built-in external-tool import adapters.
+#[tauri::command]
+fn list_import_adapters() -> serde_json::Value {
+    serde_json::to_value(AdapterRegistry::with_builtins().list()).unwrap_or(serde_json::json!([]))
+}
+
+/// Import external-tool output through an adapter, normalizing it into findings.
+#[tauri::command]
+fn import_tool_output(project_id: Option<String>, adapter_id: String, content: String, state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let reg = AdapterRegistry::with_builtins();
+    let manifest = reg.get(&adapter_id).ok_or_else(|| format!("unknown adapter: {adapter_id}"))?.clone();
+    let findings = fs_adapters::parse_with(&manifest, &content);
+    if let Some(pid_str) = &project_id {
+        if let Ok(pid) = uuid::Uuid::parse_str(pid_str) {
+            let st = state.lock().map_err(|_| "state lock")?;
+            let s = st.storage()?;
+            for nf in &findings {
+                let sev = match nf.severity.as_str() {
+                    "critical" => Severity::Critical, "high" => Severity::High, "medium" => Severity::Medium, "low" => Severity::Low, _ => Severity::Info,
+                };
+                if let Ok(mut f) = fs_core::Finding::new(pid, nf.title.clone(), sev) {
+                    f.status = Some("imported".into());
+                    f.description = format!("Imported from {} ({})", nf.source_tool, manifest.module);
+                    f.source_check_id = nf.reference.clone();
+                    f.evidence.insert("target".into(), serde_json::json!(nf.target));
+                    f.evidence.insert("source_tool".into(), serde_json::json!(nf.source_tool));
+                    let _ = s.save_finding(&f);
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({"adapter": adapter_id, "module": manifest.module, "count": findings.len(), "findings": findings}))
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -1030,7 +1188,13 @@ fn main() {
             build_credential_audit,
             import_api_spec,
             crawl_site,
-            web_analyze
+            web_analyze,
+            oob_mint,
+            oob_match,
+            ad_parse_dump,
+            ad_import_bloodhound,
+            list_import_adapters,
+            import_tool_output
         ])
         .run(tauri::generate_context!())
         .expect("error while running FableScope");
