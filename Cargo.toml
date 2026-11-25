@@ -13,6 +13,10 @@ members = [
   "crates/fs-oob",
   "crates/fs-ad",
   "crates/fs-adapters",
+  "crates/fs-wifi",
+  "crates/fs-redteam",
+  "crates/fs-mobile",
+  "crates/fs-cli",
   "apps/desktop/src-tauri",
 ]
 

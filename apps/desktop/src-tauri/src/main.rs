@@ -1118,6 +1118,69 @@ fn import_tool_output(project_id: Option<String>, adapter_id: String, content: S
     Ok(serde_json::json!({"adapter": adapter_id, "module": manifest.module, "count": findings.len(), "findings": findings}))
 }
 
+// ---------------------------------------------------------------------------
+// Phase 3: WiFi (capability matrix + capture parsing + gated audit planning),
+// Red Team (ATT&CK catalog + emulation planning), Mobile (manifest analysis).
+// ---------------------------------------------------------------------------
+
+/// Report the wireless capability matrix for the current platform.
+#[tauri::command]
+fn wifi_capabilities() -> serde_json::Value {
+    serde_json::to_value(fs_wifi::capability_matrix()).unwrap_or(serde_json::json!([]))
+}
+
+/// Parse captured WiFi material (Hashcat 22000 lines) into normalized records.
+#[tauri::command]
+fn wifi_parse_captures(text: String) -> serde_json::Value {
+    serde_json::to_value(fs_wifi::parse_captures(&text)).unwrap_or(serde_json::json!([]))
+}
+
+/// Build a gated Hashcat 22000 audit plan for captured WiFi material (command
+/// only; execution requires hardware/authorization and stays gated).
+#[tauri::command]
+fn wifi_plan_audit(captures_json: String, hash_file: String, wordlist: String, authorized: bool) -> Result<serde_json::Value, String> {
+    let captures: Vec<fs_wifi::WifiCapture> = serde_json::from_str(&captures_json).map_err(|e| e.to_string())?;
+    let plan = fs_wifi::plan_audit(&captures, &hash_file, &wordlist, authorized).map_err(|e| e.to_string())?;
+    serde_json::to_value(plan).map_err(|e| e.to_string())
+}
+
+/// List the curated MITRE ATT&CK technique catalog.
+#[tauri::command]
+fn redteam_catalog() -> serde_json::Value {
+    serde_json::to_value(fs_redteam::technique_catalog()).unwrap_or(serde_json::json!([]))
+}
+
+/// Build an authorized adversary-emulation plan from ATT&CK technique IDs.
+#[tauri::command]
+fn redteam_build_plan(name: String, technique_ids: Vec<String>, objective: String, authorized: bool) -> Result<serde_json::Value, String> {
+    let plan = fs_redteam::build_plan(&name, &technique_ids, &objective, authorized).map_err(|e| e.to_string())?;
+    serde_json::to_value(plan).map_err(|e| e.to_string())
+}
+
+/// Analyze an AndroidManifest.xml for MASVS-relevant issues; medium/high issues
+/// are persisted as findings.
+#[tauri::command]
+fn mobile_analyze_manifest(project_id: Option<String>, content: String, state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let observations = fs_mobile::analyze_android_manifest(&content);
+    let summary = fs_mobile::summarize(&observations);
+    if let Some(pid_str) = &project_id {
+        if let Ok(pid) = uuid::Uuid::parse_str(pid_str) {
+            let st = state.lock().map_err(|_| "state lock")?;
+            let s = st.storage()?;
+            for o in observations.iter().filter(|o| o.severity == "high" || o.severity == "medium") {
+                let sev = if o.severity == "high" { Severity::High } else { Severity::Medium };
+                if let Ok(mut f) = fs_core::Finding::new(pid, format!("{} ({})", o.check, o.masvs), sev) {
+                    f.status = Some("potential".into());
+                    f.source_check_id = Some(o.masvs.clone());
+                    f.description = o.detail.clone();
+                    let _ = s.save_finding(&f);
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({"summary": summary, "observations": observations}))
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -1194,7 +1257,13 @@ fn main() {
             ad_parse_dump,
             ad_import_bloodhound,
             list_import_adapters,
-            import_tool_output
+            import_tool_output,
+            wifi_capabilities,
+            wifi_parse_captures,
+            wifi_plan_audit,
+            redteam_catalog,
+            redteam_build_plan,
+            mobile_analyze_manifest
         ])
         .run(tauri::generate_context!())
         .expect("error while running FableScope");

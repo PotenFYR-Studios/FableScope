@@ -1,0 +1,21 @@
+[package]
+name = "fs-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "fablescope"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+fs-core = { path = "../fs-core" }
+fs-tools = { path = "../fs-tools" }
+fs-reporting = { path = "../fs-reporting" }
+fs-recon = { path = "../fs-recon" }
+fs-wordlists = { path = "../fs-wordlists" }
+fs-ad = { path = "../fs-ad" }
+fs-adapters = { path = "../fs-adapters" }

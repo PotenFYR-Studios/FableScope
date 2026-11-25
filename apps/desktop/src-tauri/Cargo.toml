@@ -24,3 +24,6 @@ fs-ai = { path = "../../../crates/fs-ai" }
 fs-oob = { path = "../../../crates/fs-oob" }
 fs-ad = { path = "../../../crates/fs-ad" }
 fs-adapters = { path = "../../../crates/fs-adapters" }
+fs-wifi = { path = "../../../crates/fs-wifi" }
+fs-redteam = { path = "../../../crates/fs-redteam" }
+fs-mobile = { path = "../../../crates/fs-mobile" }

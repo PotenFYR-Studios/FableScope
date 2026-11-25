@@ -102,6 +102,16 @@
         <pre id="phase3Out">[]</pre>
       </div>
 
+      <div class="card">
+        <h3>Phase 3 — WiFi, Red Team & Mobile (analysis/planning)</h3>
+        <div class="muted">Offline analysis and authorized planning only — no radio capture, no cracking, no C2 execution. Those require hardware/authorization and remain gated.</div>
+        <div class="row" style="margin-top:8px"><button id="wifiCapsBtn">WiFi Capability Matrix</button><button id="rtCatalogBtn">ATT&CK Catalog</button></div>
+        <div class="row"><input id="rtTechniques" placeholder="ATT&CK IDs (T1190,T1003,T1048)" /><input id="rtName" placeholder="op name" /><button id="rtPlanBtn">Build Emulation Plan (authorized)</button></div>
+        <textarea id="mobManifest" rows="3" placeholder="Paste AndroidManifest.xml to analyze (MASVS)"></textarea>
+        <div class="row"><button id="mobAnalyzeBtn">Analyze Android Manifest</button></div>
+        <pre id="phase3bOut">[]</pre>
+      </div>
+
       <div class="grid">
         <div class="card">
           <h3>Config (import/export-ready JSON)</h3>
@@ -301,6 +311,12 @@
     $('bhImportBtn').onclick = async () => { try { show('phase3Out', await invoke('ad_import_bloodhound', { projectId: $('projectId').value || null, kind: $('bhKind').value || 'user', content: $('adDump').value })); } catch(e){ show('phase3Out', String(e)); } };
     $('listAdaptersBtn').onclick = async () => { try { show('phase3Out', await invoke('list_import_adapters')); } catch(e){ show('phase3Out', String(e)); } };
     $('importOutputBtn').onclick = async () => { try { show('phase3Out', await invoke('import_tool_output', { projectId: $('projectId').value || null, adapterId: $('adapterId').value || 'import.nuclei', content: $('adDump').value })); } catch(e){ show('phase3Out', String(e)); } };
+
+    // --- Phase 3b WiFi / Red Team / Mobile ---
+    $('wifiCapsBtn').onclick = async () => { try { show('phase3bOut', await invoke('wifi_capabilities')); } catch(e){ show('phase3bOut', String(e)); } };
+    $('rtCatalogBtn').onclick = async () => { try { show('phase3bOut', await invoke('redteam_catalog')); } catch(e){ show('phase3bOut', String(e)); } };
+    $('rtPlanBtn').onclick = async () => { try { show('phase3bOut', await invoke('redteam_build_plan', { name: $('rtName').value || 'operation', techniqueIds: csv('rtTechniques'), objective: 'authorized emulation', authorized: true })); } catch(e){ show('phase3bOut', String(e)); } };
+    $('mobAnalyzeBtn').onclick = async () => { try { show('phase3bOut', await invoke('mobile_analyze_manifest', { projectId: $('projectId').value || null, content: $('mobManifest').value })); } catch(e){ show('phase3bOut', String(e)); } };
 
     init();
   </script>
