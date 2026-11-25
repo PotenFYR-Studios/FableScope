@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FableScope</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#121a30; --card:#141d36; --line:#26314f; --text:#e7ecf5; --muted:#9fb0d0; --accent:#4f8cff; }
+    *{box-sizing:border-box} body{margin:0;font-family:ui-sans-serif,system-ui;background:var(--bg);color:var(--text)}
+    .wrap{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+    aside{background:var(--panel);padding:20px;border-right:1px solid var(--line)}
+    main{padding:24px} .muted{color:var(--muted)} .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+    button{background:var(--accent);color:#fff;border:0;padding:9px 12px;border-radius:8px;cursor:pointer;margin-right:8px;margin-bottom:8px}
+    input,textarea{width:100%;background:#0c1428;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px}
+    pre{white-space:pre-wrap;word-break:break-word;background:#0c1428;padding:12px;border-radius:8px;max-height:320px;overflow:auto}
+    .row{display:flex;gap:8px;align-items:center}.row input{flex:1}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside>
+      <h2>FableScope</h2>
+      <div class="muted">Desktop foundation (Tauri + Rust)</div>
+      <hr style="border-color:#26314f">
+      <div class="muted">Projects • Checklists • Tools • Config • Audit-ready storage</div>
+    </aside>
+    <main>
+      <div class="card">
+        <h1 style="margin:0 0 8px">FableScope Control Panel</h1>
+        <div class="muted" id="info">Loading app info...</div>
+        <div class="row" style="margin-top:10px"><button id="loadDashboard">Dashboard</button><button id="loadJobs">Jobs</button><button id="createJob">Create Job</button><button id="loadModules">Modules</button><button id="loadAdapters">Adapters</button><button id="loadAssets">Assets</button></div>
+        <pre id="dashboardOut">[]</pre>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Projects</h3>
+          <div class="row"><input id="projectName" placeholder="New project name" /><button id="createProject">Create</button></div>
+          <button id="refreshProjects">Refresh</button>
+          <pre id="projectsOut">[]</pre>
+        </div>
+        <div class="card">
+          <h3>Recon Probe (scoped)</h3>
+          <div class="row"><input id="targets" placeholder="targets comma-separated (https://example.com)" /></div>
+          <div class="row"><input id="allow" placeholder="allow scope (example.com)" /><input id="deny" placeholder="deny scope (admin.example.com)" /></div>
+          <div class="row"><button id="saveScope">Save Scope</button><button id="loadScope">Load Scope</button><button id="probeBtn">Probe</button><button id="loadRecon">Load Saved</button></div>
+          <div class="row"><input id="fuzzBase" placeholder="fuzz base URL" /><input id="fuzzWords" placeholder="words comma-separated (admin,api,login)" /></div>
+          <div class="row"><button id="fuzzBtn">Fuzz Probe</button></div>
+          <pre id="reconOut">[]</pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Checklist (selected project)</h3>
+        <div class="row"><input id="projectId" placeholder="Project ID" /><button id="loadChecklist">Load</button><button id="exportProject">Export</button><button id="exportConfirmed">Confirmed Export</button><button id="exportConfirmedCsv">Confirmed CSV</button><button id="exportConfirmedHtml">Confirmed HTML</button><button id="loadTimeline">Timeline</button></div>
+        <div class="row"><input id="checkId" placeholder="Check ID (FS-WEB-001)" /><input id="checkStatus" placeholder="status: pass/fail/potential..." /></div>
+        <div class="row"><input id="checkNotes" placeholder="Notes/evidence summary" /><button id="updateCheck">Update</button></div>
+        <div class="row"><input id="checkTarget" placeholder="Target for run_check (https://example.com)" /><button id="runCheck">Run Check</button></div>
+        <div class="row"><input id="findingSeverity" placeholder="severity: info/low/medium/high/critical" /><button id="promoteFinding">Promote to Finding</button><button id="loadFindings">Load Findings</button></div>
+        <pre id="checklistOut">[]</pre>
+      </div>
+
+      <div class="card">
+        <h3>Phase 1 — Smart Recon, Fuzzing & Tools</h3>
+        <div class="muted">Mutator-driven fuzzing, subdomain/cloud recon, triage (dedup/cluster/novelty), password generator, wordlist registry. Scope from the Recon Probe card applies.</div>
+        <div class="row" style="margin-top:8px"><input id="sfBase" placeholder="fuzz base URL (https://example.com/app)" /><input id="sfWords" placeholder="seed words (admin,api,config)" /></div>
+        <div class="row"><input id="sfStrategies" placeholder="strategies (wordlist,case,affix,encoding,path_traversal)" /><button id="smartFuzzBtn">Smart Fuzz</button><button id="triageBtn">Triage Saved</button></div>
+        <div class="row"><input id="subRoot" placeholder="root domain (example.com)" /><input id="subPrefixes" placeholder="extra prefixes (jira,vault)" /><button id="subGenBtn">Subdomain Candidates</button><button id="subProbeBtn">Subdomain Scan+Probe</button></div>
+        <div class="row"><input id="cloudNames" placeholder="cloud base names (acme,acme-corp)" /><button id="cloudGenBtn">Cloud Candidates</button><button id="cloudProbeBtn">Cloud Scan+Probe</button></div>
+        <div class="row"><input id="queryGroup" placeholder="group by (status_class/host/content_type/status)" /><button id="queryReconBtn">Group Saved Recon</button></div>
+        <div class="row"><input id="pwLen" placeholder="password length (16)" /><input id="pwCount" placeholder="count (10)" /><button id="genPwBtn">Generate Passwords</button></div>
+        <div class="row"><input id="ppWords" placeholder="passphrase word count (5)" /><button id="genPpBtn">Passphrase</button><input id="mangleBase" placeholder="mangle base word" /><button id="mangleBtn">Mangle</button></div>
+        <div class="row"><button id="wlSourcesBtn">Wordlist Sources</button></div>
+        <pre id="phase1Out">[]</pre>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Config (import/export-ready JSON)</h3>
+          <button id="loadConfig">Load Config</button>
+          <button id="saveConfig">Save Config</button>
+          <textarea id="configText" rows="14"></textarea>
+        </div>
+        <div class="card">
+          <h3>Portable Tool Manager</h3>
+          <button id="loadTools">Detect Tools</button>
+          <button id="provisionTool">Provision Tool</button>
+          <button id="exportManifests">Export Manifests</button>
+          <button id="importManifests">Import Manifests</button>
+          <button id="loadRuns">Tool Runs</button>
+          <button id="loadAudit">Audit Log</button>
+          <button id="loadTemplate">Checklist Templates</button>
+          <input id="templateId" placeholder="template id (owasp-api-minimal)" />
+          <button id="seedTemplate">Seed Template</button>
+          <button id="loadWordlists">Wordlist Packs</button>
+          <button id="exportReport">Report (MD)</button>
+          <button id="exportReportHtml">Report (HTML)</button>
+          <button id="exportReportCsv">Report (CSV)</button>
+          <button id="exportReportSarif">Report (SARIF)</button>
+          <div class="row"><input id="toolId" placeholder="tool id (e.g. nikto)" /><input id="toolArgs" placeholder='args, comma separated' /></div>
+          <div class="row"><input id="runProjectId" placeholder="project id (optional)" /><input id="runCheckId" placeholder="check id (optional)" /></div>
+          <button id="runTool">Run Tool</button>
+          <pre id="toolsOut">[]</pre>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script>
+    const invoke = (cmd, args={}) => window.__TAURI__.core.invoke(cmd, args);
+    const $ = (id) => document.getElementById(id);
+    const show = (id, v) => $(id).textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+
+    async function refreshProjects() { show('projectsOut', await invoke('list_projects')); }
+    async function loadConfig() { const cfg = await invoke('get_config'); $('configText').value = JSON.stringify(cfg, null, 2); }
+    async function init() {
+      try {
+        show('info', await invoke('app_info'));
+        await refreshProjects();
+        await loadConfig();
+      } catch (e) { show('info', String(e)); }
+    }
+
+    $('refreshProjects').onclick = () => refreshProjects().catch(e=>show('projectsOut', String(e)));
+    $('createProject').onclick = async () => {
+      try { const p = await invoke('create_project', { name: $('projectName').value || 'Untitled Project' }); $('projectId').value = p.id; await refreshProjects(); await $('loadChecklist').click(); }
+      catch(e){ show('projectsOut', String(e)); }
+    };
+    $('loadDashboard').onclick = async () => { try { show('dashboardOut', await invoke('dashboard_stats', { projectId: $('projectId').value || null })); } catch(e){ show('dashboardOut', String(e)); } };
+    $('loadJobs').onclick = async () => { try { show('dashboardOut', await invoke('list_jobs', { projectId: $('projectId').value || null })); } catch(e){ show('dashboardOut', String(e)); } };
+    $('createJob').onclick = async () => { try { show('dashboardOut', await invoke('create_job', { projectId: $('projectId').value, kind: 'manual' })); } catch(e){ show('dashboardOut', String(e)); } };
+    $('loadModules').onclick = async () => { try { show('dashboardOut', await invoke('list_modules')); } catch(e){ show('dashboardOut', String(e)); } };
+    $('loadAdapters').onclick = async () => { try { show('dashboardOut', await invoke('list_adapters', { module: null })); } catch(e){ show('dashboardOut', String(e)); } };
+    $('loadAssets').onclick = async () => { try { show('dashboardOut', await invoke('list_assets', { projectId: $('projectId').value })); } catch(e){ show('dashboardOut', String(e)); } };
+    $('loadChecklist').onclick = async () => {
+      try { show('checklistOut', await invoke('list_checklist', { projectId: $('projectId').value })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('updateCheck').onclick = async () => {
+      try {
+        await invoke('update_checklist_item', { projectId: $('projectId').value, checkId: $('checkId').value, status: $('checkStatus').value, notes: $('checkNotes').value || null });
+        await $('loadChecklist').click();
+      } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('exportProject').onclick = async () => {
+      try { show('checklistOut', await invoke('export_project', { projectId: $('projectId').value })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('exportConfirmed').onclick = async () => {
+      try { show('checklistOut', await invoke('export_confirmed_checklist', { projectId: $('projectId').value })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('exportConfirmedCsv').onclick = async () => {
+      try { show('checklistOut', await invoke('export_confirmed_checklist_csv', { projectId: $('projectId').value })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('exportConfirmedHtml').onclick = async () => {
+      try { show('checklistOut', await invoke('export_confirmed_checklist_html', { projectId: $('projectId').value })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('loadTimeline').onclick = async () => {
+      try { show('checklistOut', await invoke('project_timeline', { projectId: $('projectId').value })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('promoteFinding').onclick = async () => {
+      try { show('checklistOut', await invoke('promote_check_to_finding', { projectId: $('projectId').value, checkId: $('checkId').value, severity: $('findingSeverity').value || 'medium', title: null })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('loadFindings').onclick = async () => {
+      try { show('checklistOut', await invoke('list_findings', { projectId: $('projectId').value })); } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('probeBtn').onclick = async () => {
+      try {
+        const targets = $('targets').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const allow = $('allow').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const deny = $('deny').value.split(',').map(s=>s.trim()).filter(Boolean);
+        show('reconOut', await invoke('probe_targets', { projectId: $('projectId').value || null, targets, allow, deny }));
+      } catch(e){ show('reconOut', String(e)); }
+    };
+    $('fuzzBtn').onclick = async () => {
+      try {
+        const words = $('fuzzWords').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const allow = $('allow').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const deny = $('deny').value.split(',').map(s=>s.trim()).filter(Boolean);
+        show('reconOut', await invoke('fuzz_probe', { projectId: $('projectId').value || null, baseUrl: $('fuzzBase').value, words, wordlistPack: ($('fuzzPack') && $('fuzzPack').value) || null, allow, deny }));
+      } catch(e){ show('reconOut', String(e)); }
+    };
+    $('loadRecon').onclick = async () => {
+      try { show('reconOut', await invoke('list_recon_results', { projectId: $('projectId').value || null })); } catch(e){ show('reconOut', String(e)); }
+    };
+    $('saveScope').onclick = async () => {
+      try {
+        const allow = $('allow').value.split(',').map(s=>s.trim()).filter(Boolean);
+        const deny = $('deny').value.split(',').map(s=>s.trim()).filter(Boolean);
+        show('reconOut', await invoke('save_scope', { projectId: $('projectId').value, allow, deny }));
+      } catch(e){ show('reconOut', String(e)); }
+    };
+    $('loadScope').onclick = async () => {
+      try { const s = await invoke('get_scope', { projectId: $('projectId').value }); $('allow').value = (s.allow||[]).join(','); $('deny').value = (s.deny||[]).join(','); show('reconOut', s); } catch(e){ show('reconOut', String(e)); }
+    };
+    $('runCheck').onclick = async () => {
+      try {
+        show('checklistOut', await invoke('run_check', { projectId: $('projectId').value, checkId: $('checkId').value, target: $('checkTarget').value }));
+        await $('loadChecklist').click();
+      } catch(e){ show('checklistOut', String(e)); }
+    };
+    $('loadConfig').onclick = () => loadConfig().catch(e=>show('toolsOut', String(e)));
+    $('saveConfig').onclick = async () => {
+      try { const cfg = await invoke('save_config', { configJson: $('configText').value }); $('configText').value = JSON.stringify(cfg, null, 2); }
+      catch(e){ alert(String(e)); }
+    };
+    $('loadTools').onclick = async () => { try { show('toolsOut', await invoke('list_tools')); } catch(e){ show('toolsOut', String(e)); } };
+    $('provisionTool').onclick = async () => { try { show('toolsOut', await invoke('provision_tool', { toolId: $('toolId').value })); } catch(e){ show('toolsOut', String(e)); } };
+    $('exportManifests').onclick = async () => { try { show('toolsOut', await invoke('export_tool_manifests')); } catch(e){ show('toolsOut', String(e)); } };
+    $('importManifests').onclick = async () => { try { show('toolsOut', await invoke('import_tool_manifests', { manifestsJson: $('configText').value })); } catch(e){ show('toolsOut', String(e)); } };
+    $('loadRuns').onclick = async () => { try { show('toolsOut', await invoke('list_tool_runs')); } catch(e){ show('toolsOut', String(e)); } };
+    $('loadAudit').onclick = async () => { try { show('toolsOut', await invoke('list_audit')); } catch(e){ show('toolsOut', String(e)); } };
+    $('runTool').onclick = async () => {
+      try {
+        const args = $('toolArgs').value.split(',').map(s=>s.trim()).filter(Boolean);
+        show('toolsOut', await invoke('run_tool', { toolId: $('toolId').value, args, profile: null, projectId: $('runProjectId').value || null, checkId: $('runCheckId').value || null }));
+      } catch(e){ show('toolsOut', String(e)); }
+    };
+    $('loadTemplate').onclick = async () => { try { show('toolsOut', await invoke('list_checklist_templates')); } catch(e){ show('toolsOut', String(e)); } };
+    $('seedTemplate').onclick = async () => { try { show('toolsOut', await invoke('seed_checklist_template', { projectId: $('projectId').value, templateId: $('templateId').value || 'owasp-web-minimal' })); await $('loadChecklist').click(); } catch(e){ show('toolsOut', String(e)); } };
+    $('loadWordlists').onclick = async () => { try { show('toolsOut', await invoke('list_wordlist_packs')); } catch(e){ show('toolsOut', String(e)); } };
+    $('exportReport').onclick = async () => { try { show('toolsOut', await invoke('export_project_report', { projectId: $('projectId').value, format: 'md' })); } catch(e){ show('toolsOut', String(e)); } };
+    $('exportReportHtml').onclick = async () => { try { show('toolsOut', await invoke('export_project_report', { projectId: $('projectId').value, format: 'html' })); } catch(e){ show('toolsOut', String(e)); } };
+    $('exportReportCsv').onclick = async () => { try { show('toolsOut', await invoke('export_project_report', { projectId: $('projectId').value, format: 'csv' })); } catch(e){ show('toolsOut', String(e)); } };
+    $('exportReportSarif').onclick = async () => { try { show('toolsOut', await invoke('export_project_report', { projectId: $('projectId').value, format: 'sarif' })); } catch(e){ show('toolsOut', String(e)); } };
+
+    // --- Phase 1 smart recon / tools ---
+    const csv = (id) => $(id).value.split(',').map(s=>s.trim()).filter(Boolean);
+    const scopeAllow = () => csv('allow');
+    const scopeDeny = () => csv('deny');
+    $('smartFuzzBtn').onclick = async () => {
+      try {
+        const strategies = csv('sfStrategies');
+        show('phase1Out', await invoke('smart_fuzz', { projectId: $('projectId').value || null, baseUrl: $('sfBase').value, words: csv('sfWords'), strategies: strategies.length?strategies:null, allow: scopeAllow(), deny: scopeDeny() }));
+      } catch(e){ show('phase1Out', String(e)); }
+    };
+    $('triageBtn').onclick = async () => { try { show('phase1Out', await invoke('triage_recon', { projectId: $('projectId').value })); } catch(e){ show('phase1Out', String(e)); } };
+    $('subGenBtn').onclick = async () => {
+      try { show('phase1Out', await invoke('subdomain_scan', { projectId: $('projectId').value || null, root: $('subRoot').value, extraPrefixes: csv('subPrefixes'), known: [], probe: false, allow: scopeAllow(), deny: scopeDeny() })); } catch(e){ show('phase1Out', String(e)); }
+    };
+    $('subProbeBtn').onclick = async () => {
+      try { show('phase1Out', await invoke('subdomain_scan', { projectId: $('projectId').value || null, root: $('subRoot').value, extraPrefixes: csv('subPrefixes'), known: [], probe: true, allow: scopeAllow(), deny: scopeDeny() })); } catch(e){ show('phase1Out', String(e)); }
+    };
+    $('cloudGenBtn').onclick = async () => {
+      try { show('phase1Out', await invoke('cloud_scan', { projectId: $('projectId').value || null, baseNames: csv('cloudNames'), probe: false, allow: scopeAllow(), deny: scopeDeny() })); } catch(e){ show('phase1Out', String(e)); }
+    };
+    $('cloudProbeBtn').onclick = async () => {
+      try { show('phase1Out', await invoke('cloud_scan', { projectId: $('projectId').value || null, baseNames: csv('cloudNames'), probe: true, allow: scopeAllow(), deny: scopeDeny() })); } catch(e){ show('phase1Out', String(e)); }
+    };
+    $('queryReconBtn').onclick = async () => {
+      try { show('phase1Out', await invoke('query_recon', { projectId: $('projectId').value, filters: null, groupBy: $('queryGroup').value || 'status_class' })); } catch(e){ show('phase1Out', String(e)); }
+    };
+    $('genPwBtn').onclick = async () => {
+      try { const policy = JSON.stringify({ length: parseInt($('pwLen').value||'16',10), lower:true, upper:true, digits:true, symbols:true, exclude:'' }); show('phase1Out', await invoke('generate_passwords', { policyJson: policy, count: parseInt($('pwCount').value||'10',10) })); } catch(e){ show('phase1Out', String(e)); }
+    };
+    $('genPpBtn').onclick = async () => { try { show('phase1Out', await invoke('generate_passphrase', { words: parseInt($('ppWords').value||'5',10), separator: '-' })); } catch(e){ show('phase1Out', String(e)); } };
+    $('mangleBtn').onclick = async () => { try { show('phase1Out', await invoke('mangle_word', { base: $('mangleBase').value })); } catch(e){ show('phase1Out', String(e)); } };
+    $('wlSourcesBtn').onclick = async () => { try { show('phase1Out', await invoke('list_wordlist_sources')); } catch(e){ show('phase1Out', String(e)); } };
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+[package]
+name = "fablescope-desktop"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+fs-core = { path = "../../../crates/fs-core" }
+fs-config = { path = "../../../crates/fs-config" }
+fs-storage = { path = "../../../crates/fs-storage" }
+fs-tools = { path = "../../../crates/fs-tools" }
+fs-checklists = { path = "../../../crates/fs-checklists" }
+fs-recon = { path = "../../../crates/fs-recon" }
+fs-wordlists = { path = "../../../crates/fs-wordlists" }
+fs-reporting = { path = "../../../crates/fs-reporting" }
+fs-ai = { path = "../../../crates/fs-ai" }
