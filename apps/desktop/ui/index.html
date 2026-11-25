@@ -71,6 +71,7 @@
         <div class="row"><input id="queryGroup" placeholder="group by (status_class/host/content_type/status)" /><button id="queryReconBtn">Group Saved Recon</button></div>
         <div class="row"><input id="pwLen" placeholder="password length (16)" /><input id="pwCount" placeholder="count (10)" /><button id="genPwBtn">Generate Passwords</button></div>
         <div class="row"><input id="ppWords" placeholder="passphrase word count (5)" /><button id="genPpBtn">Passphrase</button><input id="mangleBase" placeholder="mangle base word" /><button id="mangleBtn">Mangle</button></div>
+        <div class="row"><input id="crawlUrl" placeholder="crawl/analyze start URL (https://example.com)" /><input id="crawlMax" placeholder="max pages (25)" /><button id="crawlBtn">Crawl Site</button><button id="webAnalyzeBtn">Web Checks (headers/CORS/cookies)</button></div>
         <div class="row"><button id="wlSourcesBtn">Wordlist Sources</button></div>
         <pre id="phase1Out">[]</pre>
       </div>
@@ -268,6 +269,8 @@
     $('genPpBtn').onclick = async () => { try { show('phase1Out', await invoke('generate_passphrase', { words: parseInt($('ppWords').value||'5',10), separator: '-' })); } catch(e){ show('phase1Out', String(e)); } };
     $('mangleBtn').onclick = async () => { try { show('phase1Out', await invoke('mangle_word', { base: $('mangleBase').value })); } catch(e){ show('phase1Out', String(e)); } };
     $('wlSourcesBtn').onclick = async () => { try { show('phase1Out', await invoke('list_wordlist_sources')); } catch(e){ show('phase1Out', String(e)); } };
+    $('crawlBtn').onclick = async () => { try { show('phase1Out', await invoke('crawl_site', { projectId: $('projectId').value || null, startUrl: $('crawlUrl').value, maxPages: parseInt($('crawlMax').value||'25',10), allow: scopeAllow(), deny: scopeDeny() })); } catch(e){ show('phase1Out', String(e)); } };
+    $('webAnalyzeBtn').onclick = async () => { try { show('phase1Out', await invoke('web_analyze', { projectId: $('projectId').value || null, target: $('crawlUrl').value, allow: scopeAllow(), deny: scopeDeny() })); } catch(e){ show('phase1Out', String(e)); } };
 
     // --- Phase 2 hash id / codec / credential audit ---
     $('hashIdBtn').onclick = async () => { try { show('phase2Out', await invoke('identify_hash', { input: $('hashInput').value })); } catch(e){ show('phase2Out', String(e)); } };

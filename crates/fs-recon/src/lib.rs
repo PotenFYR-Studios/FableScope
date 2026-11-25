@@ -8,13 +8,17 @@ use url::Url;
 use uuid::Uuid;
 
 pub mod cloud;
+pub mod crawl;
 pub mod filter;
 pub mod fingerprint;
 pub mod mutators;
 pub mod specimport;
 pub mod subdomain;
+pub mod webcheck;
 
+pub use crawl::{extract as extract_page, in_scope_links, PageExtract};
 pub use specimport::{parse_graphql_sdl, parse_openapi, ApiEndpoint, ApiInventory, ApiParam};
+pub use webcheck::{analyze_all as analyze_web, diff_responses, WebObservation};
 
 pub use cloud::{exposure_indicators, storage_candidates_scoped, CloudProvider, ExposureIndicator};
 pub use filter::{apply_filters, group, Filter, GroupBy};

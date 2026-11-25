@@ -867,6 +867,55 @@ fn codec_transform(codec_name: String, input: String, decode: bool) -> Result<se
     Ok(serde_json::json!({"codec": codec_name, "decode": decode, "output": out}))
 }
 
+/// Scope-guarded web crawl from a start URL: extracts links, forms, JS
+/// endpoints, and parameter names (persisted as recon results for fuzzing).
+#[tauri::command]
+async fn crawl_site(project_id: Option<String>, start_url: String, max_pages: Option<usize>, allow: Vec<String>, deny: Vec<String>, state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let mut scope = ScopePolicy { allow, deny };
+    if scope.allow.is_empty() {
+        if let Some(h) = start_url.split("://").nth(1).and_then(|r| r.split('/').next()) { scope.allow.push(h.to_string()); }
+    }
+    let cfg = ReconConfig::default();
+    let result = fs_recon::crawl::crawl(vec![start_url.clone()], &scope, &cfg, max_pages.unwrap_or(25)).await.map_err(|e| e.to_string())?;
+    if let Some(pid) = &project_id {
+        let st = state.lock().map_err(|_| "state lock")?;
+        let s = st.storage()?;
+        let rows: Vec<serde_json::Value> = result.urls.iter().map(|u| serde_json::json!({"id": uuid::Uuid::new_v4().to_string(), "kind": "crawl_url", "url": u})).collect();
+        let _ = s.save_recon_results(Some(pid), "crawl", &rows);
+    }
+    serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+/// Run native web security checks (headers/CORS/cookies, WSTG-mapped) against a
+/// scoped target and return observations; failing checks persist as findings.
+#[tauri::command]
+async fn web_analyze(project_id: Option<String>, target: String, allow: Vec<String>, deny: Vec<String>, state: State<'_, Mutex<AppState>>) -> Result<serde_json::Value, String> {
+    let scope = ScopePolicy { allow, deny };
+    if !scope.allow.is_empty() || !scope.deny.is_empty() {
+        scope.assert_allowed(&target).map_err(|e| e.to_string())?;
+    }
+    let cfg = ReconConfig::default();
+    let results = probe_urls(vec![target.clone()], &scope, &cfg).await.map_err(|e| e.to_string())?;
+    let r = results.into_iter().next().ok_or("target did not respond or was out of scope")?;
+    let observations = fs_recon::webcheck::analyze_all(&r);
+    if let Some(pid_str) = &project_id {
+        if let Ok(pid) = uuid::Uuid::parse_str(pid_str) {
+            let st = state.lock().map_err(|_| "state lock")?;
+            let s = st.storage()?;
+            for o in observations.iter().filter(|o| !o.passed && matches!(o.severity, Severity::Medium | Severity::High | Severity::Critical)) {
+                if let Ok(mut f) = fs_core::Finding::new(pid, format!("{} ({})", o.check, o.wstg), o.severity.clone()) {
+                    f.description = o.detail.clone();
+                    f.status = Some("potential".into());
+                    f.source_check_id = Some(o.wstg.clone());
+                    f.evidence.insert("target".into(), serde_json::json!(target));
+                    let _ = s.save_finding(&f);
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({"target": target, "observations": observations}))
+}
+
 /// Import an OpenAPI/Swagger (JSON) or GraphQL SDL spec into a normalized
 /// endpoint + parameter inventory. Discovered parameter names are persisted as
 /// recon results so they seed param fuzzing.
@@ -979,7 +1028,9 @@ fn main() {
             identify_hash,
             codec_transform,
             build_credential_audit,
-            import_api_spec
+            import_api_spec,
+            crawl_site,
+            web_analyze
         ])
         .run(tauri::generate_context!())
         .expect("error while running FableScope");
