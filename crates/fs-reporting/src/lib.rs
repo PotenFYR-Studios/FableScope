@@ -169,6 +169,121 @@ pub fn render_report_sarif_like(project: &str, findings: &[serde_json::Value]) -
     })
 }
 
+/// Severity breakdown counts for a set of findings.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct SeverityBreakdown {
+    pub critical: usize,
+    pub high: usize,
+    pub medium: usize,
+    pub low: usize,
+    pub info: usize,
+}
+
+impl SeverityBreakdown {
+    pub fn total(&self) -> usize {
+        self.critical + self.high + self.medium + self.low + self.info
+    }
+}
+
+/// Tally findings by severity string.
+pub fn severity_breakdown(findings: &[serde_json::Value]) -> SeverityBreakdown {
+    let mut b = SeverityBreakdown::default();
+    for f in findings {
+        match f.get("severity").and_then(|v| v.as_str()).unwrap_or("info") {
+            "critical" => b.critical += 1,
+            "high" => b.high += 1,
+            "medium" => b.medium += 1,
+            "low" => b.low += 1,
+            _ => b.info += 1,
+        }
+    }
+    b
+}
+
+/// Checklist coverage: fraction of items with a decided status (not
+/// not_started / in_progress).
+pub fn checklist_coverage(checklist: &[serde_json::Value]) -> (usize, usize, f32) {
+    let total = checklist.len();
+    let done = checklist
+        .iter()
+        .filter(|i| {
+            !matches!(i.get("status").and_then(|v| v.as_str()).unwrap_or("not_started"), "not_started" | "in_progress")
+        })
+        .count();
+    let pct = if total == 0 { 100.0 } else { (done as f32 / total as f32) * 100.0 };
+    (done, total, pct)
+}
+
+/// Render an enterprise-grade HTML report: executive summary, severity
+/// breakdown, checklist coverage, and a per-finding technical section with
+/// evidence and remediation placeholders.
+pub fn render_enterprise_html(project: &str, findings: &[serde_json::Value], checklist: &[serde_json::Value]) -> String {
+    let b = severity_breakdown(findings);
+    let (done, total, pct) = checklist_coverage(checklist);
+    let generated = Utc::now().to_rfc3339();
+
+    let mut finding_rows = String::new();
+    // Order findings by severity rank for the technical section.
+    let rank = |s: &str| match s { "critical" => 0, "high" => 1, "medium" => 2, "low" => 3, _ => 4 };
+    let mut sorted: Vec<&serde_json::Value> = findings.iter().collect();
+    sorted.sort_by_key(|f| rank(f.get("severity").and_then(|v| v.as_str()).unwrap_or("info")));
+    for f in sorted {
+        let sev = f.get("severity").and_then(|v| v.as_str()).unwrap_or("info");
+        finding_rows.push_str(&format!(
+            "<section class='finding sev-{}'><h3>{} <span class='badge'>{}</span></h3>\
+             <p class='meta'>Status: {} · Check: {} · Confidence: {}</p>\
+             <p>{}</p>\
+             <details><summary>Evidence</summary><pre>{}</pre></details></section>",
+            html_escape(sev),
+            html_escape(f.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled")),
+            html_escape(sev),
+            html_escape(f.get("status").and_then(|v| v.as_str()).unwrap_or("candidate")),
+            html_escape(f.get("source_check_id").and_then(|v| v.as_str()).unwrap_or("—")),
+            html_escape(&f.get("confidence").map(|v| v.to_string()).unwrap_or_else(|| "—".into())),
+            html_escape(f.get("description").and_then(|v| v.as_str()).unwrap_or("")),
+            html_escape(&f.get("evidence").map(|v| serde_json::to_string_pretty(v).unwrap_or_default()).unwrap_or_default()),
+        ));
+    }
+    if finding_rows.is_empty() {
+        finding_rows.push_str("<p>No findings recorded.</p>");
+    }
+
+    format!(
+        "<!doctype html><html><head><meta charset='utf-8'><title>FableScope Report — {proj}</title>\
+        <style>body{{font-family:system-ui,Segoe UI,Arial;margin:0;color:#1a2233;background:#f5f7fb}}\
+        header{{background:#0b1020;color:#fff;padding:28px 32px}}main{{padding:24px 32px;max-width:1000px;margin:0 auto}}\
+        h1{{margin:0}}.sub{{color:#9fb0d0}}.cards{{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}}\
+        .kpi{{background:#fff;border:1px solid #dde3ef;border-radius:10px;padding:14px 18px;min-width:120px}}\
+        .kpi b{{font-size:24px;display:block}}.bar{{height:10px;border-radius:5px;background:#e3e8f2;overflow:hidden}}\
+        .bar>i{{display:block;height:100%;background:#4f8cff}}.finding{{background:#fff;border:1px solid #dde3ef;border-left-width:5px;border-radius:8px;padding:14px 18px;margin:12px 0}}\
+        .sev-critical{{border-left-color:#b00020}}.sev-high{{border-left-color:#e4572e}}.sev-medium{{border-left-color:#f3a712}}\
+        .sev-low{{border-left-color:#3fa34d}}.sev-info{{border-left-color:#4f8cff}}\
+        .badge{{font-size:12px;text-transform:uppercase;background:#eef2fb;padding:2px 8px;border-radius:10px;vertical-align:middle}}\
+        .meta{{color:#64748b;font-size:13px}}pre{{white-space:pre-wrap;background:#0c1428;color:#e7ecf5;padding:10px;border-radius:6px}}</style></head>\
+        <body><header><h1>FableScope Security Assessment</h1><div class='sub'>{proj} · generated {gen}</div></header><main>\
+        <h2>Executive Summary</h2>\
+        <div class='cards'>\
+        <div class='kpi'><b>{total_f}</b>Findings</div>\
+        <div class='kpi sev-critical'><b>{crit}</b>Critical</div>\
+        <div class='kpi sev-high'><b>{high}</b>High</div>\
+        <div class='kpi sev-medium'><b>{med}</b>Medium</div>\
+        <div class='kpi sev-low'><b>{low}</b>Low</div>\
+        <div class='kpi'><b>{info}</b>Info</div>\
+        </div>\
+        <h2>Checklist Coverage</h2>\
+        <p>{done} / {ctotal} checks reviewed ({pct:.0}%)</p>\
+        <div class='bar'><i style='width:{pct:.0}%'></i></div>\
+        <h2>Findings</h2>{rows}\
+        <h2>Methodology &amp; Scope</h2><p class='meta'>Testing performed under explicit authorization and scope policy. \
+        Active checks are rate-limited and scope-gated; blind/OOB validation uses correlation IDs. \
+        All tool runs are logged, version-pinned, and mapped to checklist/finding IDs.</p>\
+        </main></body></html>",
+        proj = html_escape(project), gen = html_escape(&generated),
+        total_f = b.total(), crit = b.critical, high = b.high, med = b.medium, low = b.low, info = b.info,
+        done = done, ctotal = total, pct = pct, rows = finding_rows,
+    )
+}
+
 fn csv_escape(s: &str) -> String {
     let s = s.replace('"', "\"\"");
     if s.contains(',') || s.contains('"') || s.contains('\n') { format!("\"{s}\"") } else { s }
@@ -200,6 +315,36 @@ mod tests {
         assert!(html.contains("<table>"));
         assert!(csv.contains("FS-WEB-001"));
     }
+    #[test]
+    fn severity_breakdown_and_coverage() {
+        let findings = vec![
+            serde_json::json!({"severity":"critical"}),
+            serde_json::json!({"severity":"high"}),
+            serde_json::json!({"severity":"high"}),
+        ];
+        let b = severity_breakdown(&findings);
+        assert_eq!(b.critical, 1);
+        assert_eq!(b.high, 2);
+        assert_eq!(b.total(), 3);
+        let checklist = vec![
+            serde_json::json!({"status":"pass"}),
+            serde_json::json!({"status":"not_started"}),
+        ];
+        let (done, total, pct) = checklist_coverage(&checklist);
+        assert_eq!((done, total), (1, 2));
+        assert!((pct - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn enterprise_html_has_sections() {
+        let findings = vec![serde_json::json!({"title":"XSS","severity":"high","status":"confirmed","description":"d"})];
+        let html = render_enterprise_html("Acme", &findings, &[serde_json::json!({"status":"pass"})]);
+        assert!(html.contains("Executive Summary"));
+        assert!(html.contains("Checklist Coverage"));
+        assert!(html.contains("sev-high"));
+        assert!(html.contains("Acme"));
+    }
+
     #[test]
     fn sarif_like_render() {
         let findings = vec![serde_json::json!({"title":"X","severity":"high","source_check_id":"FS-WEB-001"})];

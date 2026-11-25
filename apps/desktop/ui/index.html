@@ -75,6 +75,18 @@
         <pre id="phase1Out">[]</pre>
       </div>
 
+      <div class="card">
+        <h3>Phase 2 — Hash ID, Encoders & Credential Audit</h3>
+        <div class="muted">Hash identification, encoders/decoders, and authorized Hashcat/John command building (builds args only — execution runs through the gated tool manager; auditing must be authorized).</div>
+        <div class="row" style="margin-top:8px"><input id="hashInput" placeholder="hash to identify (e.g. 8846f7ea...)" /><button id="hashIdBtn">Identify Hash</button></div>
+        <div class="row"><input id="codecName" placeholder="codec: base64/hex/url/html_entity/rot13" /><input id="codecInput" placeholder="text" /><button id="codecEncBtn">Encode</button><button id="codecDecBtn">Decode</button></div>
+        <div class="row"><input id="caEngine" placeholder="engine: hashcat/john" /><input id="caSample" placeholder="sample hash (for mode inference)" /></div>
+        <textarea id="caJob" rows="4" placeholder='{"hash_file":"hashes.txt","hashcat_mode":1000,"attack":{"dictionary":{"wordlist":"rockyou.txt","rules":"best64.rule"}},"authorized":true}'></textarea>
+        <div class="row"><button id="caBuildBtn">Build Audit Command</button></div>
+        <div class="row"><button id="reportEnterprise">Report (Enterprise HTML)</button></div>
+        <pre id="phase2Out">[]</pre>
+      </div>
+
       <div class="grid">
         <div class="card">
           <h3>Config (import/export-ready JSON)</h3>
@@ -254,6 +266,15 @@
     $('genPpBtn').onclick = async () => { try { show('phase1Out', await invoke('generate_passphrase', { words: parseInt($('ppWords').value||'5',10), separator: '-' })); } catch(e){ show('phase1Out', String(e)); } };
     $('mangleBtn').onclick = async () => { try { show('phase1Out', await invoke('mangle_word', { base: $('mangleBase').value })); } catch(e){ show('phase1Out', String(e)); } };
     $('wlSourcesBtn').onclick = async () => { try { show('phase1Out', await invoke('list_wordlist_sources')); } catch(e){ show('phase1Out', String(e)); } };
+
+    // --- Phase 2 hash id / codec / credential audit ---
+    $('hashIdBtn').onclick = async () => { try { show('phase2Out', await invoke('identify_hash', { input: $('hashInput').value })); } catch(e){ show('phase2Out', String(e)); } };
+    $('codecEncBtn').onclick = async () => { try { show('phase2Out', await invoke('codec_transform', { codecName: $('codecName').value || 'base64', input: $('codecInput').value, decode: false })); } catch(e){ show('phase2Out', String(e)); } };
+    $('codecDecBtn').onclick = async () => { try { show('phase2Out', await invoke('codec_transform', { codecName: $('codecName').value || 'base64', input: $('codecInput').value, decode: true })); } catch(e){ show('phase2Out', String(e)); } };
+    $('caBuildBtn').onclick = async () => {
+      try { show('phase2Out', await invoke('build_credential_audit', { jobJson: $('caJob').value, engine: $('caEngine').value || 'hashcat', sampleHash: $('caSample').value || null, johnFormat: null })); } catch(e){ show('phase2Out', String(e)); }
+    };
+    $('reportEnterprise').onclick = async () => { try { show('phase2Out', await invoke('export_project_report', { projectId: $('projectId').value, format: 'enterprise' })); } catch(e){ show('phase2Out', String(e)); } };
 
     init();
   </script>

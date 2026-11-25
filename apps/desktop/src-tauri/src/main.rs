@@ -8,9 +8,9 @@ use fs_recon::{
     apply_filters, cloud, enrich_results, generate_fuzz_targets, generate_smart_fuzz_targets, group,
     mutators, probe_urls, subdomain, Filter, GroupBy, ReconConfig,
 };
-use fs_reporting::{calculate_cvss_v31, render_report_csv, render_report_html, render_report_json, render_report_markdown, render_report_sarif_like};
+use fs_reporting::{calculate_cvss_v31, render_enterprise_html, render_report_csv, render_report_html, render_report_json, render_report_markdown, render_report_sarif_like};
 use fs_storage::Storage;
-use fs_tools::{password, ToolBundleSource, ToolKind, ToolManager, ToolManifest, ToolRunRequest};
+use fs_tools::{codec, credential_audit, hashid, password, ToolBundleSource, ToolKind, ToolManager, ToolManifest, ToolRunRequest};
 use fs_wordlists::{builtin_packs, WordlistRegistry};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -204,6 +204,8 @@ fn builtin_manifests() -> Vec<ToolManifest> {
         ToolManifest { id: "nuclei".into(), name: "Nuclei".into(), version: "managed".into(), kind: ToolKind::PortableBundle, executable: if cfg!(windows) { "nuclei.exe".into() } else { "nuclei".into() }, bundle: ToolBundleSource { url: None, sha256: None, size_bytes: None, license: Some("MIT".into()), provenance: Some("builtin-managed".into()), format: None }, platform_bundles: BTreeMap::new(), supported_os: vec!["windows".into(),"linux".into(),"macos".into()], profiles: nuclei_profiles },
         ToolManifest { id: "nmap".into(), name: "Nmap".into(), version: "managed".into(), kind: ToolKind::PortableBundle, executable: if cfg!(windows) { "nmap.exe".into() } else { "nmap".into() }, bundle: ToolBundleSource { url: None, sha256: None, size_bytes: None, license: Some("Nmap".into()), provenance: Some("builtin-managed".into()), format: None }, platform_bundles: BTreeMap::new(), supported_os: vec!["windows".into(),"linux".into(),"macos".into()], profiles: BTreeMap::new() },
         ToolManifest { id: "rustscan".into(), name: "RustScan".into(), version: "managed".into(), kind: ToolKind::PortableBundle, executable: if cfg!(windows) { "rustscan.exe".into() } else { "rustscan".into() }, bundle: ToolBundleSource { url: None, sha256: None, size_bytes: None, license: Some("GPL".into()), provenance: Some("builtin-managed".into()), format: None }, platform_bundles: BTreeMap::new(), supported_os: vec!["windows".into(),"linux".into(),"macos".into()], profiles: BTreeMap::new() },
+        ToolManifest { id: "hashcat".into(), name: "Hashcat".into(), version: "managed".into(), kind: ToolKind::PortableBundle, executable: if cfg!(windows) { "hashcat.exe".into() } else { "hashcat".into() }, bundle: ToolBundleSource { url: None, sha256: None, size_bytes: None, license: Some("MIT".into()), provenance: Some("builtin-managed; authorized credential audit only".into()), format: None }, platform_bundles: BTreeMap::new(), supported_os: vec!["windows".into(),"linux".into(),"macos".into()], profiles: BTreeMap::new() },
+        ToolManifest { id: "john".into(), name: "John the Ripper".into(), version: "managed".into(), kind: ToolKind::PortableBundle, executable: if cfg!(windows) { "john.exe".into() } else { "john".into() }, bundle: ToolBundleSource { url: None, sha256: None, size_bytes: None, license: Some("GPLv2".into()), provenance: Some("builtin-managed; authorized credential audit only".into()), format: None }, platform_bundles: BTreeMap::new(), supported_os: vec!["windows".into(),"linux".into(),"macos".into()], profiles: BTreeMap::new() },
     ]
 }
 
@@ -529,9 +531,10 @@ fn export_project_report(project_id: String, format: String, state: State<'_, Mu
         "json" => render_report_json(project, &findings, &checklist).to_string(),
         "md" | "markdown" => render_report_markdown(project, &findings),
         "html" => render_report_html(project, &findings, &checklist),
+        "enterprise" => render_enterprise_html(project, &findings, &checklist),
         "csv" => render_report_csv(&findings),
         "sarif" => render_report_sarif_like(project, &findings).to_string(),
-        _ => return Err("unsupported format; use json, md, html, csv, or sarif".into()),
+        _ => return Err("unsupported format; use json, md, html, enterprise, csv, or sarif".into()),
     };
     Ok(serde_json::json!({"format": format, "content": out}))
 }
@@ -835,6 +838,49 @@ fn list_wordlist_versions(app: tauri::AppHandle, source_id: String) -> Result<se
     serde_json::to_value(versions).map_err(|e| e.to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2: hash identification, encoders/decoders, credential-audit adapters.
+// ---------------------------------------------------------------------------
+
+/// Identify likely hash types for an input, ranked by confidence.
+#[tauri::command]
+fn identify_hash(input: String) -> Result<serde_json::Value, String> {
+    serde_json::to_value(hashid::identify(&input)).map_err(|e| e.to_string())
+}
+
+/// Encode or decode a string with a codec (base64/hex/url/html_entity/rot13).
+#[tauri::command]
+fn codec_transform(codec_name: String, input: String, decode: bool) -> Result<serde_json::Value, String> {
+    let c = match codec_name.as_str() {
+        "base64" => codec::Codec::Base64,
+        "hex" => codec::Codec::Hex,
+        "url" => codec::Codec::Url,
+        "html_entity" => codec::Codec::HtmlEntity,
+        "rot13" => codec::Codec::Rot13,
+        _ => return Err("unknown codec; use base64/hex/url/html_entity/rot13".into()),
+    };
+    let out = if decode {
+        codec::decode(c, &input).map_err(|e| e.to_string())?
+    } else {
+        codec::encode(c, &input)
+    };
+    Ok(serde_json::json!({"codec": codec_name, "decode": decode, "output": out}))
+}
+
+/// Build an authorized Hashcat/John command for a credential-audit job. Does NOT
+/// execute — returns the argument vector for review; execution runs through the
+/// gated tool manager. `authorized` must be true or the build is refused.
+#[tauri::command]
+fn build_credential_audit(job_json: String, engine: String, sample_hash: Option<String>, john_format: Option<String>) -> Result<serde_json::Value, String> {
+    let job: credential_audit::CredentialAuditJob = serde_json::from_str(&job_json).map_err(|e| e.to_string())?;
+    let args = match engine.as_str() {
+        "hashcat" => credential_audit::build_hashcat_args(&job, sample_hash.as_deref()).map_err(|e| e.to_string())?,
+        "john" => credential_audit::build_john_args(&job, john_format.as_deref(), sample_hash.as_deref()).map_err(|e| e.to_string())?,
+        _ => return Err("engine must be 'hashcat' or 'john'".into()),
+    };
+    Ok(serde_json::json!({"engine": engine, "args": args, "resolved_mode": job.resolve_mode(sample_hash.as_deref())}))
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -899,7 +945,10 @@ fn main() {
             list_wordlist_sources,
             add_wordlist_version,
             pin_wordlist_version,
-            list_wordlist_versions
+            list_wordlist_versions,
+            identify_hash,
+            codec_transform,
+            build_credential_audit
         ])
         .run(tauri::generate_context!())
         .expect("error while running FableScope");

@@ -2,7 +2,7 @@
 
 FableScope is a **Rust-first, Tauri v2 desktop pentest platform** designed for authorized security testing across web, API, Active Directory, WiFi, mobile-assisted, red team, and enterprise environments. The project is being built in phases, with **Phase 1 focused on smart recon and fuzzing**.
 
-> **Status:** Active greenfield implementation. **Phase 0 (foundation) and Phase 1 (smart recon & fuzzing) are implemented** as a working Rust/Tauri desktop app with SQLite persistence, a module registry/dashboard, checklist/tool-run engine, reporting (JSON/MD/HTML/CSV/SARIF + CVSS v3.1), and an AI provider abstraction. Phase 1 adds: a mutator-driven fuzz engine, subdomain recon + asset graph, cloud-exposure recon, SimHash dedup/clustering with baseline/novelty triage, result filtering/grouping, a versioned wordlist registry (pin/rollback/integrity), and an offline algorithmic password generator — all covered by workspace unit tests. The README distinguishes **implemented** vs **planned/adapter-dependent** modules; external/hardware/cloud/AD/WiFi/mobile/red-team *execution* capabilities (P2–P4) remain gated adapter/planned surfaces, not claimed as fully autonomous offensive coverage.
+> **Status:** Active greenfield implementation. **Phase 0 (foundation) and Phase 1 (smart recon & fuzzing) are implemented** as a working Rust/Tauri desktop app with SQLite persistence, a module registry/dashboard, checklist/tool-run engine, reporting (JSON/MD/HTML/CSV/SARIF + CVSS v3.1), and an AI provider abstraction. Phase 1 adds: a mutator-driven fuzz engine, subdomain recon + asset graph, cloud-exposure recon, SimHash dedup/clustering with baseline/novelty triage, result filtering/grouping, a versioned wordlist registry (pin/rollback/integrity), and an offline algorithmic password generator — all covered by workspace unit tests. **Phase 2 is in progress**: hash identification (Hashcat-mode/John-format aware), encoders/decoders, authorization-gated Hashcat/John credential-audit command building + output parsing, and an enterprise HTML report template are implemented and tested; the native web/API crawler and OpenAPI/GraphQL import remain pending. The README distinguishes **implemented** vs **planned/adapter-dependent** modules; external/hardware/cloud/AD/WiFi/mobile/red-team *execution* capabilities (P2–P4) remain gated adapter/planned surfaces, not claimed as fully autonomous offensive coverage. Credential auditing never runs without an explicit per-engagement authorization flag.
 
 ---
 
@@ -85,7 +85,7 @@ FableScope aims to be a high-performance, highly customizable security testing p
 | **Wordlists** | Sources, Packs, Updates, Versions | SecLists/public/custom wordlists, auto-update, version pinning, rollback, smart packs | Implemented (registry with immutable versions, pin/rollback, integrity, diff; built-in packs + DB packs) |
 | **AI Agents** | Project Agent, Module Agents, Providers, Audit | Scoped project/module AI agents, prompt engineering, memory, provider routing, local-only mode, audit trail | Scaffolded (deterministic/no-egress) |
 | **Integrations** | Tool Manager, Webhooks, Trackers, Imports | Install/check/connect/validate/run external tools, webhooks, issue trackers, imports/exports | Scaffolded (tool manifests/import/export) |
-| **Reports** | Templates, Findings, Evidence, CVSS, Export | Enterprise report templates, CVSS scoring, evidence management, multi-format export, retest tracking | Scaffolded (JSON/MD/HTML/CSV/SARIF, CVSS v3.1) |
+| **Reports** | Templates, Findings, Evidence, CVSS, Export | Enterprise report templates, CVSS scoring, evidence management, multi-format export, retest tracking | Implemented (JSON/MD/HTML/CSV/SARIF + enterprise HTML exec-summary template, CVSS v3.1, severity/coverage KPIs) |
 | **Settings** | Profiles, DB, Security, UI, Keys | Project/workspace settings, DB connections, secrets, themes, keybindings, policies | Scaffolded (config/scope) |
 
 ---
@@ -164,7 +164,7 @@ Target/Asset
 |---|---|---|---|---|
 | **P0** | Foundation | Build the runnable platform skeleton | Tauri v2 app, Rust workspace, config, SQLite, jobs/events/audit, logging, module registry, settings UI | Implemented (realtime push pending) |
 | **P1** | Recon & Fuzzing | Deliver smart recon/fuzzing MVP | URL/param/header/body fuzzing, baselines, dedup, filters/grouping, realtime results, wordlists, AI hooks | Implemented (MVP) |
-| **P2** | Web/API, Reporting & Credential Audit | Expand core testing and reporting | crawler/API discovery, OpenAPI/GraphQL, reporting engine, CVSS calculator, password generator, hash ID, Hashcat/John adapters | Planned |
+| **P2** | Web/API, Reporting & Credential Audit | Expand core testing and reporting | crawler/API discovery, OpenAPI/GraphQL, reporting engine, CVSS calculator, password generator, hash ID, Hashcat/John adapters | In progress (reporting/CVSS, hash ID, encoders, Hashcat/John adapters done; native crawler + OpenAPI/GraphQL import pending) |
 | **P3** | Browser, AD, WiFi, Red Team | Add advanced interactive and specialized modules | browser recorder/replay, AD enum/Kerberos/NTLM adapters, WiFi recon/capture/audit, red team external/internal workflows | Planned |
 | **P4** | Enterprise & Red Team Platform | Scale to full enterprise use | RBAC-ready model, distributed jobs, advanced reporting, cloud/network/OSINT, plugin SDK, SIEM/integrations, retest/compliance workflows | Planned |
 
@@ -182,8 +182,9 @@ Target/Asset
 - [x] P1: AI provider abstraction/config profiles (schema present; runtime routing pending)
 - [x] P1: Password generator (algorithmic mode first) (`fs-tools::password`: CSPRNG policy generation, Diceware passphrases, mangling rules, entropy estimation, dedup; `generate_passwords`/`generate_passphrase`/`mangle_word` commands)
 - [~] P2: OWASP checklist engine + coverage matrix + evidence/validation model (templates, checklist status, evidence refs, run linkage, confirmed export started)
-- [ ] P2: Reporting engine + CVSS calculator + enterprise templates
-- [ ] P2: Hashcat/John adapters + hash audit workflows
+- [x] P2: Reporting engine + CVSS calculator + enterprise templates (`fs-reporting`: CVSS v3.1 calculator, severity breakdown, checklist-coverage KPI, `render_enterprise_html` exec-summary report; `export_project_report format=enterprise`)
+- [x] P2: Hashcat/John adapters + hash audit workflows (`fs-tools::hashid` ranked identification w/ Hashcat mode + John format; `fs-tools::credential_audit` authorization-gated Hashcat/John command building + potfile/`--show` parsing; `fs-tools::codec` encoders; `build_credential_audit`/`identify_hash`/`codec_transform` commands, Hashcat/John registered in the gated tool manager)
+- [~] P2: Web/API crawler + OpenAPI/GraphQL discovery + response diffing (checklist/tool-run flow present; native crawler + spec import pending)
 - [ ] P3: Web/API/Mobile/Cloud OWASP checklist execution + AD/WiFi/browser/red-team adapters
 - [ ] P4: Enterprise management, RBAC, distributed execution, advanced reporting/compliance
 

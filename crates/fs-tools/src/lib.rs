@@ -10,7 +10,16 @@ use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
+pub mod codec;
+pub mod credential_audit;
+pub mod hashid;
 pub mod password;
+pub use codec::{decode as codec_decode, encode as codec_encode, Codec};
+pub use credential_audit::{
+    build_hashcat_args, build_john_args, parse_hashcat_potfile, parse_john_show, AttackMode,
+    CredentialAuditJob,
+};
+pub use hashid::{best as identify_hash, identify as identify_hashes, HashCandidate};
 pub use password::{
     estimate_entropy, generate as generate_passwords, generate_passphrase, mangle, Candidate,
     PasswordPolicy, Provenance,
